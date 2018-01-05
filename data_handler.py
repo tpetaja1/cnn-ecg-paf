@@ -7,7 +7,7 @@ class DataHandler():
 
     MAX_POSITIVE_TRAINING_SETS = 50
     MAX_NEGATIVE_TRAINING_SETS = 50
-    MAX_TEST_SETS = 100
+    MAX_TEST_SETS = 50
     TRAINING_DATA_DIR = "training-data/"
     TEST_DATA_DIR = "test-data/"
     DATA_TYPE = np.int16
@@ -97,10 +97,12 @@ class DataHandler():
 
     def load_test_data(self):
 
+        set_index = 0
+
         if self.verbose:
             print("Loading test data....")
 
-        for data_set_index in range(1, self.number_of_test_sets + 1):
+        for data_set_index in range(1, 2 * self.number_of_test_sets, 2):
             if data_set_index < 10:
                 file_name = self.TEST_DATA_DIR + "t0" \
                             + str(data_set_index) + ".dat"
@@ -109,7 +111,8 @@ class DataHandler():
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
             ecg_data = data[::2] - data[1::2]
-            self.test_data[data_set_index - 1, :] = ecg_data
+            self.test_data[set_index, :] = ecg_data
+            set_index += 1
 
         file_name = self.TEST_DATA_DIR + "labels.txt"
         test_labels = np.loadtxt(file_name, dtype=self.DATA_TYPE)
@@ -118,6 +121,7 @@ class DataHandler():
         """ Shuffle Test data """
         self.test_data = self.test_data[self.test_shuffled]
         self.test_labels = self.test_labels[self.test_shuffled]
+        print(self.test_labels)
 
         """ Create Theano symbolic variables from test data """
         self.test_data = theano.shared(

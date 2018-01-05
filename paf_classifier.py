@@ -12,13 +12,14 @@ class PAFClassifier():
         self.verbose = True
         self.data_handler = DataHandler(number_of_negative_sets=50,
                                         number_of_positive_sets=50,
-                                        number_of_test_sets=100,
+                                        number_of_test_sets=50,
                                         verbose=self.verbose)
         self.data_handler.load_training_data()
         self.data_handler.load_test_data()
         self.data_length = 38400  # 5 min
         self.number_of_minibatches = 6
-        self.model = CNN(number_of_filters=10)
+        self.model = CNN(number_of_filters=10, regularization_coefficient=0.1,
+                         learning_rate=0.1)
         self.model.create_computational_graph()
         self.number_of_epochs = number_of_epochs
 

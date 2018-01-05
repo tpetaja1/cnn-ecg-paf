@@ -72,7 +72,7 @@ class CNN():
         # Shape: 1  x  2
         probabilities = self.output_layer(fully_connected_layer_output)
 
-        self.prediction = T.argmax(probabilities, axis=1)
+        prediction = T.argmax(probabilities, axis=1)
 
         regularizer = \
             T.sqr(self.filter_weights.norm(L=2)) +\
@@ -82,7 +82,7 @@ class CNN():
             -T.mean(T.log(probabilities)[0, self.y]) +\
             self.regularization_coefficient * regularizer
 
-        self.error = T.sum(T.neq(self.prediction, self.y))
+        self.error = T.sum(T.neq(prediction, self.y))
 
         self.parameters = [self.filter_weights,
                            self.bias_convolution,

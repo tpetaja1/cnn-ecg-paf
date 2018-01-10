@@ -23,7 +23,7 @@ class CNN():
                  fully_connected_layer_neurons=16,
                  pool_size=2,
                  momentum=0.9,
-                 perform_normalization=True):
+                 perform_normalization="all"):
 
         """ Initialize hyperparameters """
         self.learning_rate = learning_rate
@@ -83,28 +83,35 @@ class CNN():
         self.probabilities = self.output_layer(fully_connected_layer_output)
 
         """ Predictions: Transformed into {-1, 1} """
-        self.prediction = T.sgn(T.argmax(self.probabilities, axis=1) - 0.5)
+        self.predictions = T.sgn(T.argmax(self.probabilities, axis=1) - 0.5)
 
-        regularizer = \
+        self.regularizer = \
             T.sum(self.parameters[0] ** 2) +\
             T.sum(self.parameters[2] ** 2) +\
             T.sum(self.parameters[4] ** 2)
 
-        negative_log_likelihood = \
-            -T.sum(T.log(self.probabilities)[T.arange(y.shape[0]),
-                                             T.cast(T.eq(y, 1), "int16")])
+        self.negative_log_likelihood = \
+            -T.mean(T.log(self.probabilities)[T.arange(y.shape[0]),
+                                              T.cast(T.eq(y, 1), "int16")])
 
-        penalty = self.regularization_coefficient * regularizer
+        self.penalty = \
+            self.regularization_coefficient * \
+            self.regularizer / (2 * y.shape[0])
 
-        self.cost = negative_log_likelihood + penalty
+        self.cost = self.negative_log_likelihood + self.penalty
 
-        self.error = T.sum(T.neq(self.prediction, y))
+        self.error = T.sum(T.neq(self.predictions, y))
+
+        self.sensitivity = self.calculate_sensitivity(self.predictions, y)
+
+        self.specificity = self.calculate_specificity(self.predictions, y)
 
         self.parameter_updates()
 
     def input_layer(self, input_data):
 
-        if self.perform_normalization:
+        if self.perform_normalization == "all"\
+           or self.perform_normalization == "only input":
             gamma = theano.shared(1.)
             bias = theano.shared(0.)
             running_mean = theano.shared(0.)
@@ -155,7 +162,7 @@ class CNN():
         convolution_output = \
             convolution + bias_convolution.dimshuffle("x", 0, "x")
 
-        if self.perform_normalization:
+        if self.perform_normalization == "all":
             gamma = theano.shared(1.)
             bias = theano.shared(0.)
             running_mean = theano.shared(0.)
@@ -216,7 +223,7 @@ class CNN():
         dot_output = \
             T.dot(input_data, W_fully_connected) + bias_fully_connected
 
-        if self.perform_normalization:
+        if self.perform_normalization == "all":
             gamma = theano.shared(1.)
             bias = theano.shared(0.)
             running_mean = theano.shared(0.)
@@ -310,3 +317,13 @@ class CNN():
             self.updates.append(
                 (parameter,
                  parameter + new_velocity))
+
+    def calculate_sensitivity(x, y):
+        true_positives = T.sum(T.and_(T.eq(x, 1), T.eq(y, 1)))
+        sensitivity = true_positives / T.sum(T.eq(y, 1))
+        return sensitivity
+
+    def calculate_specificity(x, y):
+        true_negatives = T.sum(T.and_(T.eq(x, -1), T.eq(y, -1)))
+        specificity = true_negatives / T.sum(T.eq(y, -1))
+        return specificity

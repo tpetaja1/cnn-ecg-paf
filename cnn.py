@@ -318,12 +318,12 @@ class CNN():
                 (parameter,
                  parameter + new_velocity))
 
-    def calculate_sensitivity(x, y):
+    def calculate_sensitivity(self, x, y):
         true_positives = T.sum(T.and_(T.eq(x, 1), T.eq(y, 1)))
         sensitivity = true_positives / T.sum(T.eq(y, 1))
         return sensitivity
 
-    def calculate_specificity(x, y):
+    def calculate_specificity(self, x, y):
         true_negatives = T.sum(T.and_(T.eq(x, -1), T.eq(y, -1)))
         specificity = true_negatives / T.sum(T.eq(y, -1))
         return specificity

@@ -1,6 +1,7 @@
 
 import theano
 import theano.tensor as T
+import numpy as np
 
 from cnn import CNN
 from data_handler import DataHandler
@@ -16,18 +17,21 @@ class PAFClassifier():
                                         verbose=self.verbose)
         self.data_handler.load_training_data()
         self.data_handler.load_test_data()
-        self.sub_ecg_length = 38400  # 5 min
-        self.number_of_sub_ecgs = 6
+
         self.mini_batch_size = 10
-        self.model = CNN(number_of_filters=16,
-                         regularization_coefficient=1e-1,
-                         learning_rate=0.01,
-                         filter_length=16,
+        self.model = CNN(number_of_filters=12,
+                         regularization_coefficient=1,
+                         learning_rate=0.09,
+                         filter_length=32,
                          mini_batch_size=self.mini_batch_size,
-                         pool_size=2,
-                         fully_connected_layer_neurons=16,
-                         momentum=0.9)
+                         pool_size=12,
+                         fully_connected_layer_neurons=6,
+                         momentum=0.9,
+                         perform_normalization="only input")
         self.number_of_epochs = number_of_epochs
+
+        self.training_errors = []
+        self.test_errors = []
 
     def create_models(self):
 
@@ -39,24 +43,23 @@ class PAFClassifier():
 
         self.model.create_computational_graph(x, y)
 
-        set_index = T.lscalar()
         index = T.lscalar()
 
         self.train_model = \
             theano.function(
-                [set_index, index],
-                (self.model.cost, self.model.error),
+                [index],
+                (self.model.cost, self.model.error,
+                 self.model.negative_log_likelihood, self.model.penalty,
+                 self.model.sensitivity, self.model.specificity),
                 updates=self.model.updates,
                 givens={x:
                         self.data_handler.training_data[
-                            set_index * self.mini_batch_size:
-                            (set_index + 1) * self.mini_batch_size,
-                            index * self.sub_ecg_length:
-                            (index + 1) * self.sub_ecg_length],
+                            index * self.mini_batch_size:
+                            (index + 1) * self.mini_batch_size],
                         y:
                         self.data_handler.training_labels[
-                            set_index * self.mini_batch_size:
-                            (set_index + 1) * self.mini_batch_size]
+                            index * self.mini_batch_size:
+                            (index + 1) * self.mini_batch_size]
                         }
             )
         if self.verbose:
@@ -66,18 +69,18 @@ class PAFClassifier():
             print("Creating Test model...")
         self.test_model = \
             theano.function(
-                [set_index, index],
-                (self.model.cost, self.model.error),
+                [index],
+                (self.model.cost, self.model.error,
+                 self.model.negative_log_likelihood, self.model.penalty,
+                 self.model.sensitivity, self.model.specificity),
                 givens={x:
                         self.data_handler.test_data[
-                            set_index * self.mini_batch_size:
-                            (set_index + 1) * self.mini_batch_size,
-                            index * self.sub_ecg_length:
-                            (index + 1) * self.sub_ecg_length],
+                            index * self.mini_batch_size:
+                            (index + 1) * self.mini_batch_size],
                         y:
                         self.data_handler.test_labels[
-                            set_index * self.mini_batch_size:
-                            (set_index + 1) * self.mini_batch_size]
+                            index * self.mini_batch_size:
+                            (index + 1) * self.mini_batch_size]
                         }
             )
         if self.verbose:
@@ -91,48 +94,82 @@ class PAFClassifier():
         for epoch_index in range(1, self.number_of_epochs + 1):
 
             if self.verbose:
-                print("    *** Epoch {}/{} ***".
+                print("    *** Epoch {}/{} ***\n".
                       format(epoch_index, self.number_of_epochs))
 
             """ Train model """
+            if self.verbose:
+                print("    ** Training **\n")
             train_errors = 0
+            sensitivities = []
+            specificities = []
             for training_set_index in range(
-                    self.data_handler.number_of_training_sets //
+                    self.data_handler.total_number_of_training_data //
                     self.mini_batch_size):
-                for minibatch_index in range(self.number_of_sub_ecgs):
-                    train_cost, train_error = \
-                        self.train_model(training_set_index, minibatch_index)
-                    train_errors += train_error
+                train_cost, train_error, nll, pen, \
+                    sensitivity, specificity = \
+                    self.train_model(training_set_index)
+                train_errors += train_error
+                sensitivities.append(sensitivity)
+                specificities.append(specificity)
+
+                if self.verbose and training_set_index % 5 == 0:
+                    print("    NLL: {}".format(nll))
+                    print("    Pen: {}".format(pen))
+                    print()
+            self.training_errors.append(train_errors)
 
             if self.verbose:
                 print("    Train Errors: {}/{}, {:.2f}%".
                       format(train_errors,
-                             self.data_handler.number_of_training_sets *
-                             self.number_of_sub_ecgs,
+                             self.data_handler.total_number_of_training_data,
                              100 * train_errors /
-                             (self.data_handler.number_of_training_sets *
-                              self.number_of_sub_ecgs)))
+                             self.data_handler.total_number_of_training_data))
+                print("    Train Sensitivity: {:.2f}%".
+                      format(100 * np.mean(sensitivities)))
+                print("    Train Specificity: {:.2f}%".
+                      format(100 * np.mean(specificities)))
                 print("    Train Cost: {}".format(train_cost))
+                print("    NLL: {}".format(nll))
+                print("    Pen: {}".format(pen))
+                print()
 
             """ Test model """
+            if self.verbose:
+                print("    ** Testing **\n")
             test_errors = 0
+            sensitivities = []
+            specificities = []
             for test_set_index in range(
-                    self.data_handler.number_of_test_sets //
+                    self.data_handler.total_number_of_test_data //
                     self.mini_batch_size):
-                for minibatch_index in range(self.number_of_sub_ecgs):
-                    test_cost, test_error = \
-                        self.test_model(test_set_index, minibatch_index)
-                    test_errors += test_error
+                test_cost, test_error, nll, pen,\
+                    sensitivity, specificity = \
+                    self.test_model(test_set_index)
+                test_errors += test_error
+                sensitivities.append(sensitivity)
+                specificities.append(specificity)
+
+                if self.verbose and test_set_index % 5 == 0:
+                    print("    NLL: {}".format(nll))
+                    print("    Pen: {}".format(pen))
+                    print()
+            self.test_errors.append(test_errors)
 
             if self.verbose:
                 print("    Test Errors: {}/{}, {:.2f}%".
                       format(test_errors,
-                             self.data_handler.number_of_test_sets *
-                             self.number_of_sub_ecgs,
+                             self.data_handler.total_number_of_test_data,
                              100 * test_errors /
-                             (self.data_handler.number_of_test_sets *
-                              self.number_of_sub_ecgs)))
+                             self.data_handler.total_number_of_test_data))
+                print("    Test Sensitivity: {:.2f}%".
+                      format(100 * np.mean(sensitivities)))
+                print("    Test Specificity: {:.2f}%".
+                      format(100 * np.mean(specificities)))
                 print("    Test Cost: {}".format(test_cost))
+                print("    NLL: {}".format(nll))
+                print("    Pen: {}".format(pen))
+                print()
 
         if self.verbose:
             print("Model trained.")

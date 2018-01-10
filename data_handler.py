@@ -16,8 +16,13 @@ class DataHandler():
                  number_of_positive_sets=50,
                  number_of_negative_sets=50,
                  number_of_test_sets=100,
+                 number_of_sub_ecgs=6,
+                 length_of_sub_ecg=38400,
                  verbose=True):
         self.verbose = verbose
+
+        self.number_of_sub_ecgs = number_of_sub_ecgs
+        self.length_of_sub_ecg = length_of_sub_ecg
 
         self.number_of_positive_sets = number_of_positive_sets
         self.number_of_negative_sets = number_of_negative_sets
@@ -25,26 +30,26 @@ class DataHandler():
             self.number_of_negative_sets + self.number_of_positive_sets
         self.number_of_test_sets = number_of_test_sets
 
-        self.training_data = \
-            np.zeros((self.number_of_training_sets, 38400*6),
-                     dtype=self.DATA_TYPE)
-        self.training_labels_raw = \
-            np.zeros(self.number_of_training_sets, dtype=self.DATA_TYPE)
+        self.total_number_of_training_data = \
+            self.number_of_sub_ecgs * self.number_of_training_sets
+        self.total_number_of_test_data = \
+            self.number_of_sub_ecgs * self.number_of_test_sets
 
-        self.test_data = \
-            np.zeros((self.number_of_test_sets, 38400*6),
-                     dtype=self.DATA_TYPE)
-        self.test_labels_raw = \
-            np.zeros(self.number_of_test_sets, dtype=self.DATA_TYPE)
+        self.training_data = np.array([], dtype=self.DATA_TYPE)
+        self.training_labels_raw = np.array([], dtype=self.DATA_TYPE)
 
-        self.training_shuffled = np.arange(self.number_of_training_sets)
+        self.test_data = np.array([], dtype=self.DATA_TYPE)
+        self.test_labels_raw = np.array([], dtype=self.DATA_TYPE)
+
+        self.training_shuffled = \
+            np.arange(self.total_number_of_training_data)
         np.random.shuffle(self.training_shuffled)
-        self.test_shuffled = np.arange(self.number_of_test_sets)
+
+        self.test_shuffled = \
+            np.arange(self.total_number_of_test_data)
         np.random.shuffle(self.test_shuffled)
 
     def load_training_data(self):
-
-        set_index = 0
 
         if self.verbose:
             print("Loading positive training data...")
@@ -58,9 +63,11 @@ class DataHandler():
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
             ecg_data = data[::2] - data[1::2]
-            self.training_data[set_index, :] = ecg_data
-            self.training_labels_raw[set_index] = 1
-            set_index += 1
+            self.training_data = np.append(self.training_data, ecg_data)
+            self.training_labels_raw = \
+                np.append(self.training_labels_raw,
+                          np.ones(self.number_of_sub_ecgs,
+                                  dtype=self.DATA_TYPE))
 
         if self.verbose:
             print("Loading negative training data...")
@@ -73,10 +80,15 @@ class DataHandler():
                 file_name = self.TRAINING_DATA_DIR + "n" + \
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            ecg_data = data[::2] - data[1::2]
-            self.training_data[set_index, :] = ecg_data
-            self.training_labels_raw[set_index] = -1
-            set_index += 1
+            self.training_data = np.append(self.training_data, ecg_data)
+            self.training_labels_raw = \
+                np.append(self.training_labels_raw,
+                          -np.ones(self.number_of_sub_ecgs,
+                                   dtype=self.DATA_TYPE))
+
+        self.training_data = self.training_data.reshape(
+            self.total_number_of_training_data,
+            self.length_of_sub_ecg)
 
         """ Shuffle Training data """
         self.training_data = self.training_data[self.training_shuffled]
@@ -98,8 +110,6 @@ class DataHandler():
 
     def load_test_data(self):
 
-        set_index = 0
-
         if self.verbose:
             print("Loading test data....")
 
@@ -112,12 +122,17 @@ class DataHandler():
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
             ecg_data = data[::2] - data[1::2]
-            self.test_data[set_index, :] = ecg_data
-            set_index += 1
+            self.test_data = np.append(self.test_data, ecg_data)
 
         file_name = self.TEST_DATA_DIR + "labels.txt"
         test_labels = np.loadtxt(file_name, dtype=self.DATA_TYPE)
         self.test_labels_raw = test_labels[:self.number_of_test_sets, 1]
+
+        self.test_data = self.test_data.reshape(
+            self.total_number_of_test_data,
+            self.length_of_sub_ecg)
+        self.test_labels_raw = \
+            np.repeat(self.test_labels_raw, self.number_of_sub_ecgs)
 
         """ Shuffle Test data """
         self.test_data = self.test_data[self.test_shuffled]

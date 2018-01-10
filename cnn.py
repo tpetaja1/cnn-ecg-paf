@@ -60,26 +60,30 @@ class CNN():
 
     def create_computational_graph(self, x, y):
 
-        # Shape: 10  x  1  x  length_of_data
+        # Shape:
+        # mini batch size  x  1  x  length of data
         input_data = self.input_layer(x)
 
-        # Shape: 10  x  number_of_filters  x
-        #        length_of_data
+        # Shape:
+        # mini batch size  x  no. of filters  x  length of data
         convolution_layer_output = self.convolution_layer(input_data)
 
-        # Shape: 10  x  number_of_filters  x
-        #        (convolution_output / subsampling_coefficient)
+        # Shape:
+        # mini batch size  x  no. of filters  x  (length of data / pool size)
         subsampling_layer_output = \
             self.subsampling_layer(convolution_layer_output)
 
-        # Shape: 10  x  (number_of_filters * subsampling_output)
+        # Shape:
+        # mini batch size  x  (number of filters * lenght of data / pool size)
         fully_connected_layer_input = subsampling_layer_output.flatten(2)
 
-        # Shape: 10  x  64
+        # Shape:
+        # mini batch size  x  fully connected layer neurons
         fully_connected_layer_output = \
             self.fully_connected_layer(fully_connected_layer_input)
 
-        # Shape: 10  x  2
+        # Shape:
+        # mini batch size  x  2
         self.probabilities = self.output_layer(fully_connected_layer_output)
 
         """ Predictions: Transformed into {-1, 1} """

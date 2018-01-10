@@ -18,14 +18,14 @@ class PAFClassifier():
         self.data_handler.load_training_data()
         self.data_handler.load_test_data()
 
-        self.mini_batch_size = 10
-        self.model = CNN(number_of_filters=12,
+        self.mini_batch_size = 50
+        self.model = CNN(number_of_filters=128,
                          regularization_coefficient=1,
                          learning_rate=0.09,
                          filter_length=32,
                          mini_batch_size=self.mini_batch_size,
-                         pool_size=12,
-                         fully_connected_layer_neurons=6,
+                         pool_size=128,
+                         fully_connected_layer_neurons=64,
                          momentum=0.9,
                          perform_normalization="only input")
         self.number_of_epochs = number_of_epochs

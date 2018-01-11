@@ -19,15 +19,16 @@ class PAFClassifier():
         self.data_handler.load_test_data()
 
         self.mini_batch_size = 50
-        self.model = CNN(number_of_filters=128,
-                         regularization_coefficient=1,
-                         learning_rate=0.09,
-                         filter_length=32,
+        self.model = CNN(number_of_filters=10,
+                         regularization_coefficient=1000,
+                         learning_rate=0.008,
+                         filter_length=12,
                          mini_batch_size=self.mini_batch_size,
                          pool_size=128,
-                         fully_connected_layer_neurons=64,
+                         fully_connected_layer_neurons=3,
                          momentum=0.9,
-                         perform_normalization="only input")
+                         perform_normalization="only input",
+                         update_type="adam")
         self.number_of_epochs = number_of_epochs
 
         self.training_errors = []
@@ -48,9 +49,9 @@ class PAFClassifier():
         self.train_model = \
             theano.function(
                 [index],
-                (self.model.cost, self.model.error,
+                [self.model.cost, self.model.error,
                  self.model.negative_log_likelihood, self.model.penalty,
-                 self.model.sensitivity, self.model.specificity),
+                 self.model.sensitivity, self.model.specificity],
                 updates=self.model.updates,
                 givens={x:
                         self.data_handler.training_data[
@@ -70,9 +71,8 @@ class PAFClassifier():
         self.test_model = \
             theano.function(
                 [index],
-                (self.model.cost, self.model.error,
-                 self.model.negative_log_likelihood, self.model.penalty,
-                 self.model.sensitivity, self.model.specificity),
+                [self.model.error,
+                 self.model.sensitivity, self.model.specificity],
                 givens={x:
                         self.data_handler.test_data[
                             index * self.mini_batch_size:
@@ -94,7 +94,7 @@ class PAFClassifier():
         for epoch_index in range(1, self.number_of_epochs + 1):
 
             if self.verbose:
-                print("    *** Epoch {}/{} ***\n".
+                print("*** Epoch {}/{} ***\n".
                       format(epoch_index, self.number_of_epochs))
 
             """ Train model """
@@ -113,7 +113,7 @@ class PAFClassifier():
                 sensitivities.append(sensitivity)
                 specificities.append(specificity)
 
-                if self.verbose and training_set_index % 5 == 0:
+                if self.verbose and training_set_index % 6 == 0:
                     print("    NLL: {}".format(nll))
                     print("    Pen: {}".format(pen))
                     print()
@@ -143,17 +143,12 @@ class PAFClassifier():
             for test_set_index in range(
                     self.data_handler.total_number_of_test_data //
                     self.mini_batch_size):
-                test_cost, test_error, nll, pen,\
-                    sensitivity, specificity = \
+                test_error, sensitivity, specificity = \
                     self.test_model(test_set_index)
                 test_errors += test_error
                 sensitivities.append(sensitivity)
                 specificities.append(specificity)
 
-                if self.verbose and test_set_index % 5 == 0:
-                    print("    NLL: {}".format(nll))
-                    print("    Pen: {}".format(pen))
-                    print()
             self.test_errors.append(test_errors)
 
             if self.verbose:
@@ -166,9 +161,6 @@ class PAFClassifier():
                       format(100 * np.mean(sensitivities)))
                 print("    Test Specificity: {:.2f}%".
                       format(100 * np.mean(specificities)))
-                print("    Test Cost: {}".format(test_cost))
-                print("    NLL: {}".format(nll))
-                print("    Pen: {}".format(pen))
                 print()
 
         if self.verbose:

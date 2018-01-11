@@ -23,7 +23,8 @@ class CNN():
                  fully_connected_layer_neurons=16,
                  pool_size=2,
                  momentum=0.9,
-                 perform_normalization="all"):
+                 perform_normalization="all",
+                 update_type="adam"):
 
         """ Initialize hyperparameters """
         self.learning_rate = learning_rate
@@ -37,6 +38,7 @@ class CNN():
         self.regularization_coefficient = regularization_coefficient
         self.momentum = momentum
         self.perform_normalization = perform_normalization
+        self.update_type = update_type
 
         """ Initialize shapes """
         self.convolution_input_shape = \
@@ -46,13 +48,24 @@ class CNN():
 
         self.pool_shape = (1, pool_size)
 
-        self.fully_connected_layer_shape = \
-            (self.number_of_filters*(
-                int(self.data_length_in_mini_batch /
-                    self.pool_shape[1])),
-             fully_connected_layer_neurons)
+        self.fully_connected_layer_neurons = fully_connected_layer_neurons
 
-        self.output_layer_shape = (fully_connected_layer_neurons, 2)
+        if fully_connected_layer_neurons is not None:
+            self.fully_connected_layer_shape = \
+                (self.number_of_filters*(
+                    int(self.data_length_in_mini_batch /
+                        pool_size)),
+                 fully_connected_layer_neurons)
+
+            self.output_layer_shape = (fully_connected_layer_neurons, 2)
+
+        else:
+
+            self.output_layer_shape = \
+                (self.number_of_filters*(
+                    int(self.data_length_in_mini_batch /
+                        pool_size)),
+                 2)
 
         """ Initialize parameters """
         self.parameters = []
@@ -77,22 +90,28 @@ class CNN():
         # mini batch size  x  (number of filters * lenght of data / pool size)
         fully_connected_layer_input = subsampling_layer_output.flatten(2)
 
-        # Shape:
-        # mini batch size  x  fully connected layer neurons
-        fully_connected_layer_output = \
-            self.fully_connected_layer(fully_connected_layer_input)
+        if self.fully_connected_layer_neurons is not None:
+            # Shape:
+            # mini batch size  x  fully connected layer neurons
+            fully_connected_layer_output = \
+                self.fully_connected_layer(fully_connected_layer_input)
 
-        # Shape:
-        # mini batch size  x  2
-        self.probabilities = self.output_layer(fully_connected_layer_output)
+            # Shape:
+            # mini batch size  x  2
+            self.probabilities = \
+                self.output_layer(fully_connected_layer_output)
+
+        else:
+            self.probabilities = self.output_layer(fully_connected_layer_input)
 
         """ Predictions: Transformed into {-1, 1} """
         self.predictions = T.sgn(T.argmax(self.probabilities, axis=1) - 0.5)
 
         self.regularizer = \
             T.sum(self.parameters[0] ** 2) +\
-            T.sum(self.parameters[2] ** 2) +\
-            T.sum(self.parameters[4] ** 2)
+            T.sum(self.parameters[2] ** 2)
+        if self.fully_connected_layer_neurons is not None:
+            self.regularizer += T.sum(self.parameters[4] ** 2)
 
         self.negative_log_likelihood = \
             -T.mean(T.log(self.probabilities)[T.arange(y.shape[0]),
@@ -264,7 +283,7 @@ class CNN():
             theano.shared(np.asarray(
                 np.random.normal(0,
                                  1/np.sqrt(
-                                     self.fully_connected_layer_shape[1]),
+                                     self.output_layer_shape[0]),
                                  size=self.output_layer_shape)),
                           name="W output",
                           borrow=True)
@@ -311,16 +330,50 @@ class CNN():
         self.gradients = T.grad(self.cost, self.parameters)
 
         """ Momentum gradient update """
-        for parameter, gradient in zip(self.parameters, self.gradients):
-            velocity = theano.shared(parameter.get_value(borrow=True)*0.)
+        if self.update_type == "momentum":
 
-            new_velocity = \
-                self.momentum * velocity - self.learning_rate * gradient
-            self.updates.append(
-                (velocity, new_velocity))
-            self.updates.append(
-                (parameter,
-                 parameter + new_velocity))
+            for parameter, gradient in zip(self.parameters, self.gradients):
+
+                velocity = theano.shared(parameter.get_value(borrow=True) * 0.)
+
+                new_velocity = \
+                    self.momentum * velocity - self.learning_rate * gradient
+                self.updates.append(
+                    (velocity, new_velocity))
+                self.updates.append(
+                    (parameter,
+                     parameter + new_velocity))
+
+        elif self.update_type == "adam":
+
+            eps = 1e-4  # small constant used for numerical stabilization.
+            beta1 = 0.9
+            beta2 = 0.999
+
+            for parameter, gradient in zip(self.parameters, self.gradients):
+                # Shared variables
+                t = theano.shared(1.)
+                s = theano.shared(parameter.get_value(borrow=True) * 0.)
+                r = theano.shared(parameter.get_value(borrow=True) * 0.)
+
+                # Correct bias
+                s_hat = s / (1. - beta1 ** t)
+                r_hat = r / (1. - beta2 ** t)
+
+                # Update moment estimates
+                self.updates.append(
+                    (s, beta1 * s + (1. - beta1) * gradient))
+                self.updates.append(
+                    (r, beta2 * r + (1. - beta2) * T.sqr(gradient)))
+
+                # Update parameter
+                self.updates.append(
+                    (parameter,
+                     parameter -
+                     self.learning_rate * s_hat / T.sqrt(r_hat + eps)))
+
+                # Update time step
+            self.updates.append((t, t + 1))
 
     def calculate_sensitivity(self, x, y):
         true_positives = T.sum(T.and_(T.eq(x, 1), T.eq(y, 1)))

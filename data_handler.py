@@ -35,10 +35,12 @@ class DataHandler():
         self.total_number_of_test_data = \
             self.number_of_sub_ecgs * self.number_of_test_sets
 
-        self.training_data = np.array([], dtype=self.DATA_TYPE)
+        self.training_data = \
+            np.array([[], []], dtype=self.DATA_TYPE).transpose()
         self.training_labels_raw = np.array([], dtype=self.DATA_TYPE)
 
-        self.test_data = np.array([], dtype=self.DATA_TYPE)
+        self.test_data = \
+            np.array([[], []], dtype=self.DATA_TYPE).transpose()
         self.test_labels_raw = np.array([], dtype=self.DATA_TYPE)
 
         self.training_shuffled = \
@@ -62,8 +64,9 @@ class DataHandler():
                 file_name = self.TRAINING_DATA_DIR + "p" + \
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            ecg_data = data[::2] - data[1::2]
-            self.training_data = np.append(self.training_data, ecg_data)
+            ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
+            self.training_data = \
+                np.append(self.training_data, ecg_2_channel, axis=0)
             self.training_labels_raw = \
                 np.append(self.training_labels_raw,
                           np.ones(self.number_of_sub_ecgs,
@@ -80,30 +83,13 @@ class DataHandler():
                 file_name = self.TRAINING_DATA_DIR + "n" + \
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            self.training_data = np.append(self.training_data, ecg_data)
+            ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
+            self.training_data = \
+                np.append(self.training_data, ecg_2_channel, axis=0)
             self.training_labels_raw = \
                 np.append(self.training_labels_raw,
                           -np.ones(self.number_of_sub_ecgs,
                                    dtype=self.DATA_TYPE))
-
-        self.training_data = self.training_data.reshape(
-            self.total_number_of_training_data,
-            self.length_of_sub_ecg)
-
-        """ Shuffle Training data """
-        self.training_data = self.training_data[self.training_shuffled]
-        self.training_labels_raw = \
-            self.training_labels_raw[self.training_shuffled]
-
-        """ Create Theano symbolic variables from training data """
-        self.training_data = theano.shared(
-            np.asarray(self.training_data,
-                       dtype=np.float64),
-            borrow=True)
-        self.training_labels = theano.shared(
-            np.asarray(self.training_labels_raw,
-                       dtype=np.int32),
-            borrow=True)
 
         if self.verbose:
             print("Training data loaded.")
@@ -121,18 +107,67 @@ class DataHandler():
                 file_name = self.TEST_DATA_DIR + "t" + \
                             str(data_set_index) + ".dat"
             data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            ecg_data = data[::2] - data[1::2]
-            self.test_data = np.append(self.test_data, ecg_data)
+            ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
+            self.test_data = \
+                np.append(self.test_data, ecg_2_channel, axis=0)
 
         file_name = self.TEST_DATA_DIR + "labels.txt"
         test_labels = np.loadtxt(file_name, dtype=self.DATA_TYPE)
         self.test_labels_raw = test_labels[:self.number_of_test_sets, 1]
 
+        if self.verbose:
+            print("Test data loaded.")
+
+    def preprocess_data(self):
+
+        if self.verbose:
+            print("Starting to preprocess data...")
+
+        self.training_data_mean = self.training_data.mean(axis=0)
+        self.training_data_std = self.training_data.std(axis=0)
+
+        """ Preprocess training data """
+        self.training_data = \
+            (self.training_data - self.training_data_mean)\
+            / self.training_data_std
+
+        self.training_data = self.training_data.reshape(
+            self.total_number_of_training_data,
+            self.length_of_sub_ecg,
+            2)
+
+        """ Transpose channels into rows (previously on columns) """
+        self.training_data = self.training_data.transpose((0, 2, 1))
+
+        """ Shuffle Training data """
+        self.training_data = self.training_data[self.training_shuffled]
+        self.training_labels_raw = \
+            self.training_labels_raw[self.training_shuffled]
+
+        """ Create Theano symbolic variables from training data """
+        self.training_data = theano.shared(
+            np.asarray(self.training_data,
+                       dtype=np.float64),
+            borrow=True)
+        self.training_labels = theano.shared(
+            np.asarray(self.training_labels_raw,
+                       dtype=np.int16),
+            borrow=True)
+
+        """ Preprocess test data """
+        self.test_data = \
+            (self.test_data - self.training_data_mean)\
+            / self.training_data_std
+
         self.test_data = self.test_data.reshape(
             self.total_number_of_test_data,
-            self.length_of_sub_ecg)
+            self.length_of_sub_ecg,
+            2)
         self.test_labels_raw = \
             np.repeat(self.test_labels_raw, self.number_of_sub_ecgs)
+
+        """ Transpose channels into rows (previously on columns) """
+        self.test_data = self.test_data.transpose((0, 2, 1))
 
         """ Shuffle Test data """
         self.test_data = self.test_data[self.test_shuffled]
@@ -145,8 +180,8 @@ class DataHandler():
             borrow=True)
         self.test_labels = theano.shared(
             np.asarray(self.test_labels_raw,
-                       dtype=np.int32),
+                       dtype=np.int16),
             borrow=True)
 
         if self.verbose:
-            print("Test data loaded.")
+            print("Data preprocessed.")

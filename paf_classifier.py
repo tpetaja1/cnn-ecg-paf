@@ -17,17 +17,18 @@ class PAFClassifier():
                                         verbose=self.verbose)
         self.data_handler.load_training_data()
         self.data_handler.load_test_data()
+        self.data_handler.preprocess_data()
 
-        self.mini_batch_size = 50
+        self.mini_batch_size = 10
         self.model = CNN(number_of_filters=10,
-                         regularization_coefficient=1000,
+                         regularization_coefficient=1,
                          learning_rate=0.008,
                          filter_length=12,
                          mini_batch_size=self.mini_batch_size,
                          pool_size=128,
                          fully_connected_layer_neurons=3,
                          momentum=0.9,
-                         perform_normalization="only input",
+                         perform_normalization="no",
                          update_type="adam")
         self.number_of_epochs = number_of_epochs
 
@@ -39,12 +40,12 @@ class PAFClassifier():
         if self.verbose:
             print("Creating Training model...")
 
-        x = T.dmatrix('x')
-        y = T.ivector('y')
+        x = T.dtensor3('x')  # float64
+        y = T.wvector('y')  # int16
 
         self.model.create_computational_graph(x, y)
 
-        index = T.lscalar()
+        index = T.bscalar()  # int8
 
         self.train_model = \
             theano.function(
@@ -113,7 +114,7 @@ class PAFClassifier():
                 sensitivities.append(sensitivity)
                 specificities.append(specificity)
 
-                if self.verbose and training_set_index % 6 == 0:
+                if self.verbose and training_set_index % 30 == 0:
                     print("    NLL: {}".format(nll))
                     print("    Pen: {}".format(pen))
                     print()

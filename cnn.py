@@ -10,6 +10,8 @@ from theano.tensor.signal import pool
 
 class CNN():
 
+    NUMBER_OF_CHANNELS = 2
+
     def __init__(self,
                  learning_rate=0.01,
                  data_length_in_mini_batch=38400,
@@ -42,80 +44,80 @@ class CNN():
 
         """ Initialize shapes """
         self.convolution_input_shape = \
-            (self.mini_batch_size, 1, self.data_length_in_mini_batch)
+            (self.mini_batch_size,
+             self.NUMBER_OF_CHANNELS,
+             self.data_length_in_mini_batch)
 
-        self.filter_shape = (self.number_of_filters, 1, self.filter_length)
+        self.filter_shape = \
+            (self.number_of_filters,
+             self.NUMBER_OF_CHANNELS,
+             self.filter_length)
 
         self.pool_shape = (1, pool_size)
 
         self.fully_connected_layer_neurons = fully_connected_layer_neurons
 
-        if fully_connected_layer_neurons is not None:
-            self.fully_connected_layer_shape = \
-                (self.number_of_filters*(
-                    int(self.data_length_in_mini_batch /
-                        pool_size)),
-                 fully_connected_layer_neurons)
+        self.fully_connected_layer_shape = \
+            (self.number_of_filters * (
+                self.data_length_in_mini_batch // pool_size),
+             fully_connected_layer_neurons)
 
-            self.output_layer_shape = (fully_connected_layer_neurons, 2)
-
-        else:
-
-            self.output_layer_shape = \
-                (self.number_of_filters*(
-                    int(self.data_length_in_mini_batch /
-                        pool_size)),
-                 2)
+        self.output_layer_shape = (fully_connected_layer_neurons, 2)
 
         """ Initialize parameters """
         self.parameters = []
         self.updates = []
 
     def create_computational_graph(self, x, y):
+        # x = input to neural network
+        # y = labels of input data
 
+        """ Computational Graph """
+        # *** Input Layer Output ***
         # Shape:
-        # mini batch size  x  1  x  length of data
-        input_data = self.input_layer(x)
+        # mini-batch size  x  no. of channels (= 2)  x  length of data
+        input_data = x
 
+        # *** Convolutional Layer Output ***
         # Shape:
-        # mini batch size  x  no. of filters  x  length of data
+        # mini-batch size  x  no. of filters  x  length of data
         convolution_layer_output = self.convolution_layer(input_data)
 
+        # *** Subsampling Layer Output ***
         # Shape:
-        # mini batch size  x  no. of filters  x  (length of data / pool size)
+        # mini-batch size  x  no. of filters  x  (length of data / pool size)
         subsampling_layer_output = \
             self.subsampling_layer(convolution_layer_output)
 
+        # *** Fully Connected Layer Input ***
         # Shape:
-        # mini batch size  x  (number of filters * lenght of data / pool size)
+        # mini-batch size  x  (no. of filters * length of data / pool size)
         fully_connected_layer_input = subsampling_layer_output.flatten(2)
 
-        if self.fully_connected_layer_neurons is not None:
-            # Shape:
-            # mini batch size  x  fully connected layer neurons
-            fully_connected_layer_output = \
-                self.fully_connected_layer(fully_connected_layer_input)
+        # *** Fully Connected Layer Output ***
+        # Shape:
+        # mini-batch size  x  no. of fully connected layer neurons
+        fully_connected_layer_output = \
+            self.fully_connected_layer(fully_connected_layer_input)
 
-            # Shape:
-            # mini batch size  x  2
-            self.probabilities = \
-                self.output_layer(fully_connected_layer_output)
+        # Output Layer Output
+        # Shape:
+        # mini-batch size  x  2
+        self.probabilities = \
+            self.output_layer(fully_connected_layer_output)
 
-        else:
-            self.probabilities = self.output_layer(fully_connected_layer_input)
-
-        """ Predictions: Transformed into {-1, 1} """
+        # Predictions: Transformed into {-1, 1}
         self.predictions = T.sgn(T.argmax(self.probabilities, axis=1) - 0.5)
 
+        """ Cost functions """
         self.regularizer = \
             T.sum(self.parameters[0] ** 2) +\
-            T.sum(self.parameters[2] ** 2)
-        if self.fully_connected_layer_neurons is not None:
-            self.regularizer += T.sum(self.parameters[4] ** 2)
+            T.sum(self.parameters[2] ** 2) +\
+            T.sum(self.parameters[4] ** 2)
 
         self.negative_log_likelihood = \
             -T.mean(T.log(self.probabilities)[T.arange(y.shape[0]),
-                                              T.cast(T.eq(y, 1), "int16")])
+                                              T.cast(T.eq(y, 1), "int8")])
 
         self.penalty = \
             self.regularization_coefficient * \
@@ -123,12 +125,14 @@ class CNN():
 
         self.cost = self.negative_log_likelihood + self.penalty
 
+        """ Metrics """
         self.error = T.sum(T.neq(self.predictions, y))
 
         self.sensitivity = self.calculate_sensitivity(self.predictions, y)
 
         self.specificity = self.calculate_specificity(self.predictions, y)
 
+        """ Backpropagation """
         self.parameter_updates()
 
     def input_layer(self, input_data):

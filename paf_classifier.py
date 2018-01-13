@@ -45,7 +45,7 @@ class PAFClassifier():
 
         self.model.create_computational_graph(x, y)
 
-        index = T.bscalar()  # int8
+        index = T.wscalar()  # int16
 
         self.train_model = \
             theano.function(

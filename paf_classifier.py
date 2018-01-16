@@ -2,6 +2,8 @@
 import theano
 import theano.tensor as T
 import numpy as np
+import time
+from sklearn.svm import SVC
 
 from cnn import CNN
 from data_handler import DataHandler
@@ -11,29 +13,34 @@ class PAFClassifier():
 
     def __init__(self, number_of_epochs=10):
         self.verbose = True
-        self.data_handler = DataHandler(number_of_negative_sets=50,
-                                        number_of_positive_sets=50,
-                                        number_of_test_sets=50,
-                                        verbose=self.verbose)
+        self.number_of_channels = 2
+        self.data_handler = \
+            DataHandler(number_of_channels=self.number_of_channels,
+                        number_of_negative_sets=50,
+                        number_of_positive_sets=50,
+                        number_of_test_sets=50,
+                        verbose=self.verbose)
         self.data_handler.load_training_data()
         self.data_handler.load_test_data()
         self.data_handler.preprocess_data()
 
-        self.mini_batch_size = 10
-        self.model = CNN(number_of_filters=10,
-                         regularization_coefficient=1,
-                         learning_rate=0.008,
+        self.mini_batch_size = 1
+        self.model = CNN(number_of_channels=self.number_of_channels,
+                         number_of_filters=12,
+                         regularization_coefficient=1e0,
+                         learning_rate=0.001,
                          filter_length=12,
-                         mini_batch_size=self.mini_batch_size,
-                         pool_size=128,
-                         fully_connected_layer_neurons=3,
+                         pool_size=512,
+                         fully_connected_layer_neurons=8,
                          momentum=0.9,
                          perform_normalization="no",
-                         update_type="adam")
+                         update_type="adam",
+                         pool_mode="average_exc_pad")
         self.number_of_epochs = number_of_epochs
 
         self.training_errors = []
         self.test_errors = []
+        self.classifier = SVC(C=11., kernel="rbf", gamma=1./(2*2.85))
 
     def create_models(self):
 
@@ -71,21 +78,17 @@ class PAFClassifier():
             print("Creating Test model...")
         self.test_model = \
             theano.function(
-                [index],
+                [x, y],
                 [self.model.error,
-                 self.model.sensitivity, self.model.specificity],
-                givens={x:
-                        self.data_handler.test_data[
-                            index * self.mini_batch_size:
-                            (index + 1) * self.mini_batch_size],
-                        y:
-                        self.data_handler.test_labels[
-                            index * self.mini_batch_size:
-                            (index + 1) * self.mini_batch_size]
-                        }
-            )
+                 self.model.sensitivity, self.model.specificity,
+                 self.model.fully_connected_layer_output])
+
         if self.verbose:
             print("Test model created.")
+
+        self.feature_extractor = theano.function(
+            [x],
+            self.model.fully_connected_layer_output)
 
     def train_neural_network(self):
 
@@ -93,6 +96,8 @@ class PAFClassifier():
             print("Training the model...")
 
         for epoch_index in range(1, self.number_of_epochs + 1):
+
+            start_time = time.time()
 
             if self.verbose:
                 print("*** Epoch {}/{} ***\n".
@@ -111,14 +116,21 @@ class PAFClassifier():
                     sensitivity, specificity = \
                     self.train_model(training_set_index)
                 train_errors += train_error
+
                 sensitivities.append(sensitivity)
                 specificities.append(specificity)
 
-                if self.verbose and training_set_index % 30 == 0:
+                if self.verbose and training_set_index % 300 == 0:
                     print("    NLL: {}".format(nll))
                     print("    Pen: {}".format(pen))
                     print()
             self.training_errors.append(train_errors)
+
+            features = self.feature_extractor(
+                self.data_handler.training_data.get_value(borrow=True))
+            svm_errors = self.gaussian_svm(
+                features,
+                self.data_handler.training_labels.get_value(borrow=True))
 
             if self.verbose:
                 print("    Train Errors: {}/{}, {:.2f}%".
@@ -133,24 +145,27 @@ class PAFClassifier():
                 print("    Train Cost: {}".format(train_cost))
                 print("    NLL: {}".format(nll))
                 print("    Pen: {}".format(pen))
+                print("    Train SVM Errors: {}/{}, {:.2f}%".
+                      format(svm_errors,
+                             self.data_handler.total_number_of_training_data,
+                             100 * svm_errors /
+                             self.data_handler.total_number_of_training_data))
                 print()
 
             """ Test model """
             if self.verbose:
                 print("    ** Testing **\n")
-            test_errors = 0
-            sensitivities = []
-            specificities = []
-            for test_set_index in range(
-                    self.data_handler.total_number_of_test_data //
-                    self.mini_batch_size):
-                test_error, sensitivity, specificity = \
-                    self.test_model(test_set_index)
-                test_errors += test_error
-                sensitivities.append(sensitivity)
-                specificities.append(specificity)
+            test_errors, sensitivity, specificity, features = \
+                self.test_model(
+                    self.data_handler.test_data.get_value(borrow=True),
+                    self.data_handler.test_labels.get_value(borrow=True))
 
             self.test_errors.append(test_errors)
+
+            svm_errors = self.gaussian_svm(
+                features,
+                self.data_handler.test_labels.get_value(borrow=True),
+                train=False)
 
             if self.verbose:
                 print("    Test Errors: {}/{}, {:.2f}%".
@@ -159,13 +174,30 @@ class PAFClassifier():
                              100 * test_errors /
                              self.data_handler.total_number_of_test_data))
                 print("    Test Sensitivity: {:.2f}%".
-                      format(100 * np.mean(sensitivities)))
+                      format(100 * sensitivity))
                 print("    Test Specificity: {:.2f}%".
-                      format(100 * np.mean(specificities)))
+                      format(100 * specificity))
+                print("    Test SVM Errors: {}/{}, {:.2f}%".
+                      format(svm_errors,
+                             self.data_handler.total_number_of_test_data,
+                             100 * svm_errors /
+                             self.data_handler.total_number_of_test_data))
                 print()
+
+            epoch_time = time.time() - start_time
+
+            if self.verbose:
+                print("Epoch time: {:.2f}s\n".format(epoch_time))
 
         if self.verbose:
             print("Model trained.")
+
+    def gaussian_svm(self, x, y, train=True):
+        if train:
+            self.classifier.fit(x, y)
+        predictions = self.classifier.predict(x)
+        error = np.sum(np.not_equal(predictions, y))
+        return error
 
 
 if __name__ == "__main__":

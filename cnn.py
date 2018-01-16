@@ -14,7 +14,7 @@ class CNN():
                  number_of_channels=2,
                  learning_rate=0.01,
                  data_length_in_mini_batch=38400,
-                 mini_batch_size=10,
+                 mini_batch_size=None,
                  number_of_filters=1,
                  filter_length=15,
                  activation=T.tanh,
@@ -169,7 +169,7 @@ class CNN():
         filter_weights = \
             theano.shared(np.asarray(
                 np.random.normal(0,
-                                 1/np.sqrt(self.filter_shape[2]),
+                                 1,
                                  size=self.filter_shape)),
                           name="Filter weights",
                           borrow=True)
@@ -235,7 +235,7 @@ class CNN():
         W_fully_connected = \
             theano.shared(np.asarray(
                 np.random.normal(0,
-                                 1/np.sqrt(self.convolution_input_shape[0]),
+                                 1,
                                  size=self.fully_connected_layer_shape)),
                           name="W fully connected",
                           borrow=True)
@@ -285,8 +285,7 @@ class CNN():
         W_output_layer = \
             theano.shared(np.asarray(
                 np.random.normal(0,
-                                 1/np.sqrt(
-                                     self.output_layer_shape[0]),
+                                 1,
                                  size=self.output_layer_shape)),
                           name="W output",
                           borrow=True)

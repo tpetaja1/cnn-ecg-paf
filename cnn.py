@@ -8,13 +8,13 @@ from theano.tensor.nnet.abstract_conv import causal_conv1d
 from theano.tensor.signal import pool
 
 
-class CNN():
+class CNN:
 
     def __init__(self,
                  number_of_channels=2,
                  learning_rate=0.01,
                  data_length_in_mini_batch=38400,
-                 mini_batch_size=None,
+                 batch_size=None,
                  number_of_filters=1,
                  filter_length=15,
                  activation=T.tanh,
@@ -31,7 +31,7 @@ class CNN():
         self.number_of_channels = number_of_channels
         self.learning_rate = learning_rate
         self.data_length_in_mini_batch = data_length_in_mini_batch
-        self.mini_batch_size = mini_batch_size
+        self.batch_size = batch_size
         self.number_of_filters = number_of_filters
         self.filter_length = filter_length
         self.activation = activation
@@ -44,7 +44,7 @@ class CNN():
 
         """ Initialize shapes """
         self.convolution_input_shape = \
-            (self.mini_batch_size,
+            (self.batch_size,
              self.number_of_channels,
              self.data_length_in_mini_batch)
 
@@ -75,34 +75,34 @@ class CNN():
         """ Computational Graph """
         # *** Input Layer ***
         # Output Shape:
-        # mini-batch size  x  no. of channels  x  length of data
+        # batch size  x  no. of channels  x  length of data
         input_data = x
 
         # *** Convolutional Layer ***
         # Output Shape:
-        # mini-batch size  x  no. of filters  x  length of data
+        # batch size  x  no. of filters  x  length of data
         convolution_layer_output = self.convolution_layer(input_data)
 
         # *** Subsampling Layer ***
         # Output Shape:
-        # mini-batch size  x  no. of filters  x  (length of data / pool size)
+        # batch size  x  no. of filters  x  (length of data / pool size)
         subsampling_layer_output = \
             self.subsampling_layer(convolution_layer_output)
 
         # *** Fully Connected Layer ***
         # Input Shape:
-        # mini-batch size  x  (no. of filters * length of data / pool size)
+        # batch size  x  (no. of filters * length of data / pool size)
         fully_connected_layer_input = subsampling_layer_output.flatten(2)
 
         # *** Fully Connected Layer ***
         # Output Shape:
-        # mini-batch size  x  no. of fully connected layer neurons
+        # batch size  x  no. of fully connected layer neurons
         self.fully_connected_layer_output = \
             self.fully_connected_layer(fully_connected_layer_input)
 
-        # Output Layer
+        # *** Output Layer ***
         # Output Shape:
-        # mini-batch size  x  2
+        # batch size  x  2
         self.probabilities = \
             self.output_layer(self.fully_connected_layer_output)
 
@@ -167,12 +167,14 @@ class CNN():
 
         """ Weight and bias for the layer """
         filter_weights = \
-            theano.shared(np.asarray(
-                np.random.normal(0,
-                                 1,
-                                 size=self.filter_shape)),
-                          name="Filter weights",
-                          borrow=True)
+            theano.shared(
+                np.asarray(
+                    np.random.normal(0,
+                                     1,
+                                     size=self.filter_shape),
+                    dtype=theano.config.floatX),
+                name="Filter weights",
+                borrow=True)
 
         bias_convolution = \
             theano.shared(np.zeros((self.number_of_filters,),
@@ -233,12 +235,14 @@ class CNN():
 
         """ Weight and bias for the layer """
         W_fully_connected = \
-            theano.shared(np.asarray(
-                np.random.normal(0,
-                                 1,
-                                 size=self.fully_connected_layer_shape)),
-                          name="W fully connected",
-                          borrow=True)
+            theano.shared(
+                np.asarray(
+                    np.random.normal(0,
+                                     1,
+                                     size=self.fully_connected_layer_shape),
+                    dtype=theano.config.floatX),
+                name="W fully connected",
+                borrow=True)
 
         bias_fully_connected = \
             theano.shared(np.zeros((self.fully_connected_layer_shape[1],),
@@ -283,12 +287,14 @@ class CNN():
 
         """ Weight and bias for the layer """
         W_output_layer = \
-            theano.shared(np.asarray(
-                np.random.normal(0,
-                                 1,
-                                 size=self.output_layer_shape)),
-                          name="W output",
-                          borrow=True)
+            theano.shared(
+                np.asarray(
+                    np.random.normal(0,
+                                     1,
+                                     size=self.output_layer_shape),
+                    dtype=theano.config.floatX),
+                name="W output",
+                borrow=True)
 
         bias_output_layer = \
             theano.shared(np.zeros((self.output_layer_shape[1],),
@@ -371,8 +377,9 @@ class CNN():
                 # Update parameter
                 self.updates.append(
                     (parameter,
-                     parameter -
-                     self.learning_rate * s_hat / T.sqrt(r_hat + eps)))
+                     T.cast(parameter -
+                            self.learning_rate * s_hat / T.sqrt(r_hat + eps),
+                            theano.config.floatX)))
 
                 # Update time step
             self.updates.append((t, t + 1))

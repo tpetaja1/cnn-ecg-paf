@@ -9,7 +9,7 @@ from cnn import CNN
 from data_handler import DataHandler
 
 
-class PAFClassifier():
+class PAFClassifier:
 
     def __init__(self, number_of_epochs=10):
         self.verbose = True
@@ -47,7 +47,7 @@ class PAFClassifier():
         if self.verbose:
             print("Creating Training model...")
 
-        x = T.dtensor3('x')  # float64
+        x = T.tensor3('x', dtype=theano.config.floatX)
         y = T.wvector('y')  # int16
 
         self.model.create_computational_graph(x, y)

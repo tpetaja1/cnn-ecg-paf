@@ -3,7 +3,7 @@ import numpy as np
 import theano
 
 
-class DataHandler():
+class DataHandler:
 
     MAX_POSITIVE_TRAINING_SETS = 50
     MAX_NEGATIVE_TRAINING_SETS = 50
@@ -176,7 +176,7 @@ class DataHandler():
         """ Create Theano symbolic variables from training data """
         self.training_data = theano.shared(
             np.asarray(self.training_data,
-                       dtype=np.float64),
+                       dtype=theano.config.floatX),
             borrow=True)
         self.training_labels = theano.shared(
             np.asarray(self.training_labels_raw,
@@ -205,7 +205,7 @@ class DataHandler():
         """ Create Theano symbolic variables from test data """
         self.test_data = theano.shared(
             np.asarray(self.test_data,
-                       dtype=np.float64),
+                       dtype=theano.config.floatX),
             borrow=True)
         self.test_labels = theano.shared(
             np.asarray(self.test_labels_raw,

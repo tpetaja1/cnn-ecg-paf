@@ -13,6 +13,7 @@ class DataHandler():
     DATA_TYPE = np.int16
 
     def __init__(self,
+                 number_of_channels=2,
                  number_of_positive_sets=50,
                  number_of_negative_sets=50,
                  number_of_test_sets=100,
@@ -20,6 +21,7 @@ class DataHandler():
                  length_of_sub_ecg=38400,
                  verbose=True):
         self.verbose = verbose
+        self.number_of_channels = number_of_channels
 
         self.number_of_sub_ecgs = number_of_sub_ecgs
         self.length_of_sub_ecg = length_of_sub_ecg
@@ -35,12 +37,18 @@ class DataHandler():
         self.total_number_of_test_data = \
             self.number_of_sub_ecgs * self.number_of_test_sets
 
-        self.training_data = \
-            np.array([[], []], dtype=self.DATA_TYPE).transpose()
-        self.training_labels_raw = np.array([], dtype=self.DATA_TYPE)
+        if self.number_of_channels == 2:
+            self.training_data = \
+                np.array([[], []], dtype=self.DATA_TYPE).transpose()
+            self.test_data = \
+                np.array([[], []], dtype=self.DATA_TYPE).transpose()
+        elif self.number_of_channels == 1:
+            self.training_data = \
+                np.array([[]], dtype=self.DATA_TYPE).transpose()
+            self.test_data = \
+                np.array([[]], dtype=self.DATA_TYPE).transpose()
 
-        self.test_data = \
-            np.array([[], []], dtype=self.DATA_TYPE).transpose()
+        self.training_labels_raw = np.array([], dtype=self.DATA_TYPE)
         self.test_labels_raw = np.array([], dtype=self.DATA_TYPE)
 
         self.training_shuffled = \
@@ -63,10 +71,17 @@ class DataHandler():
             else:
                 file_name = self.TRAINING_DATA_DIR + "p" + \
                             str(data_set_index) + ".dat"
-            data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
-            self.training_data = \
-                np.append(self.training_data, ecg_2_channel, axis=0)
+            data = np.fromfile(file_name, dtype=self.DATA_TYPE)/200
+
+            if self.number_of_channels == 2:
+                ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
+                self.training_data = \
+                    np.append(self.training_data, ecg_2_channel, axis=0)
+            elif self.number_of_channels == 1:
+                ecg0 = data[::2]
+                ecg0 = ecg0.reshape(ecg0.shape[0], 1)
+                self.training_data = \
+                    np.append(self.training_data, ecg0, axis=0)
             self.training_labels_raw = \
                 np.append(self.training_labels_raw,
                           np.ones(self.number_of_sub_ecgs,
@@ -82,13 +97,20 @@ class DataHandler():
             else:
                 file_name = self.TRAINING_DATA_DIR + "n" + \
                             str(data_set_index) + ".dat"
-            data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
-            self.training_data = \
-                np.append(self.training_data, ecg_2_channel, axis=0)
+            data = np.fromfile(file_name, dtype=self.DATA_TYPE)/200
+
+            if self.number_of_channels == 2:
+                ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
+                self.training_data = \
+                    np.append(self.training_data, ecg_2_channel, axis=0)
+            elif self.number_of_channels == 1:
+                ecg0 = data[::2]
+                ecg0 = ecg0.reshape(ecg0.shape[0], 1)
+                self.training_data = \
+                    np.append(self.training_data, ecg0, axis=0)
             self.training_labels_raw = \
                 np.append(self.training_labels_raw,
-                          -np.ones(self.number_of_sub_ecgs,
+                          np.zeros(self.number_of_sub_ecgs,
                                    dtype=self.DATA_TYPE))
 
         if self.verbose:
@@ -106,12 +128,19 @@ class DataHandler():
             else:
                 file_name = self.TEST_DATA_DIR + "t" + \
                             str(data_set_index) + ".dat"
-            data = np.fromfile(file_name, dtype=self.DATA_TYPE)
-            ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
-            self.test_data = \
-                np.append(self.test_data, ecg_2_channel, axis=0)
+            data = np.fromfile(file_name, dtype=self.DATA_TYPE)/200
 
-        file_name = self.TEST_DATA_DIR + "labels.txt"
+            if self.number_of_channels == 2:
+                ecg_2_channel = data.reshape(data.shape[0] // 2, 2)
+                self.test_data = \
+                    np.append(self.test_data, ecg_2_channel, axis=0)
+            elif self.number_of_channels == 1:
+                ecg0 = data[::2]
+                ecg0 = ecg0.reshape(ecg0.shape[0], 1)
+                self.test_data = \
+                    np.append(self.test_data, ecg0, axis=0)
+
+        file_name = self.TEST_DATA_DIR + "labels0.txt"
         test_labels = np.loadtxt(file_name, dtype=self.DATA_TYPE)
         self.test_labels_raw = test_labels[:self.number_of_test_sets, 1]
 
@@ -134,7 +163,7 @@ class DataHandler():
         self.training_data = self.training_data.reshape(
             self.total_number_of_training_data,
             self.length_of_sub_ecg,
-            2)
+            self.number_of_channels)
 
         """ Transpose channels into rows (previously on columns) """
         self.training_data = self.training_data.transpose((0, 2, 1))
@@ -162,7 +191,7 @@ class DataHandler():
         self.test_data = self.test_data.reshape(
             self.total_number_of_test_data,
             self.length_of_sub_ecg,
-            2)
+            self.number_of_channels)
         self.test_labels_raw = \
             np.repeat(self.test_labels_raw, self.number_of_sub_ecgs)
 

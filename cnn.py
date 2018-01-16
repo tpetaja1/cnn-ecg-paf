@@ -10,9 +10,8 @@ from theano.tensor.signal import pool
 
 class CNN():
 
-    NUMBER_OF_CHANNELS = 2
-
     def __init__(self,
+                 number_of_channels=2,
                  learning_rate=0.01,
                  data_length_in_mini_batch=38400,
                  mini_batch_size=10,
@@ -29,6 +28,7 @@ class CNN():
                  update_type="adam"):
 
         """ Initialize hyperparameters """
+        self.number_of_channels = number_of_channels
         self.learning_rate = learning_rate
         self.data_length_in_mini_batch = data_length_in_mini_batch
         self.mini_batch_size = mini_batch_size
@@ -45,12 +45,12 @@ class CNN():
         """ Initialize shapes """
         self.convolution_input_shape = \
             (self.mini_batch_size,
-             self.NUMBER_OF_CHANNELS,
+             self.number_of_channels,
              self.data_length_in_mini_batch)
 
         self.filter_shape = \
             (self.number_of_filters,
-             self.NUMBER_OF_CHANNELS,
+             self.number_of_channels,
              self.filter_length)
 
         self.pool_shape = (1, pool_size)
@@ -73,41 +73,41 @@ class CNN():
         # y = labels of input data
 
         """ Computational Graph """
-        # *** Input Layer Output ***
-        # Shape:
-        # mini-batch size  x  no. of channels (= 2)  x  length of data
+        # *** Input Layer ***
+        # Output Shape:
+        # mini-batch size  x  no. of channels  x  length of data
         input_data = x
 
-        # *** Convolutional Layer Output ***
-        # Shape:
+        # *** Convolutional Layer ***
+        # Output Shape:
         # mini-batch size  x  no. of filters  x  length of data
         convolution_layer_output = self.convolution_layer(input_data)
 
-        # *** Subsampling Layer Output ***
-        # Shape:
+        # *** Subsampling Layer ***
+        # Output Shape:
         # mini-batch size  x  no. of filters  x  (length of data / pool size)
         subsampling_layer_output = \
             self.subsampling_layer(convolution_layer_output)
 
-        # *** Fully Connected Layer Input ***
-        # Shape:
+        # *** Fully Connected Layer ***
+        # Input Shape:
         # mini-batch size  x  (no. of filters * length of data / pool size)
         fully_connected_layer_input = subsampling_layer_output.flatten(2)
 
-        # *** Fully Connected Layer Output ***
-        # Shape:
+        # *** Fully Connected Layer ***
+        # Output Shape:
         # mini-batch size  x  no. of fully connected layer neurons
-        fully_connected_layer_output = \
+        self.fully_connected_layer_output = \
             self.fully_connected_layer(fully_connected_layer_input)
 
-        # Output Layer Output
-        # Shape:
+        # Output Layer
+        # Output Shape:
         # mini-batch size  x  2
         self.probabilities = \
-            self.output_layer(fully_connected_layer_output)
+            self.output_layer(self.fully_connected_layer_output)
 
-        # Predictions: Transformed into {-1, 1}
-        self.predictions = T.sgn(T.argmax(self.probabilities, axis=1) - 0.5)
+        # Predictions:
+        self.predictions = T.argmax(self.probabilities, axis=1)
 
         """ Cost functions """
         self.regularizer = \
@@ -116,8 +116,7 @@ class CNN():
             T.sum(self.parameters[4] ** 2)
 
         self.negative_log_likelihood = \
-            -T.mean(T.log(self.probabilities)[T.arange(y.shape[0]),
-                                              T.cast(T.eq(y, 1), "int8")])
+            -T.mean(T.log(self.probabilities)[T.arange(y.shape[0]), y])
 
         self.penalty = \
             self.regularization_coefficient * \
@@ -385,6 +384,6 @@ class CNN():
         return sensitivity
 
     def calculate_specificity(self, x, y):
-        true_negatives = T.sum(T.and_(T.eq(x, -1), T.eq(y, -1)))
-        specificity = true_negatives / T.sum(T.eq(y, -1))
+        true_negatives = T.sum(T.and_(T.eq(x, 0), T.eq(y, 0)))
+        specificity = true_negatives / T.sum(T.eq(y, 0))
         return specificity

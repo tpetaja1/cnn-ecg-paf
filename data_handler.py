@@ -1,6 +1,7 @@
 
 import numpy as np
 import theano
+import scipy.signal as sgn
 
 
 class DataHandler:
@@ -58,6 +59,13 @@ class DataHandler:
         self.test_shuffled = \
             np.arange(self.total_number_of_test_data)
         np.random.shuffle(self.test_shuffled)
+
+        self.sampling_frequency = 128
+        self.high_pass_filter = sgn.firwin2(
+            251,
+            [0, 0.5, 2, self.sampling_frequency/2],
+            [0, 0, 1, 1],
+            fs=self.sampling_frequency)
 
     def load_training_data(self):
 
@@ -152,10 +160,12 @@ class DataHandler:
         if self.verbose:
             print("Starting to preprocess data...")
 
+        """ Preprocess training data """
+        self.training_data = self.filter_data(self.training_data.transpose())
+
         self.training_data_mean = self.training_data.mean(axis=0)
         self.training_data_std = self.training_data.std(axis=0)
 
-        """ Preprocess training data """
         self.training_data = \
             (self.training_data - self.training_data_mean)\
             / self.training_data_std
@@ -184,6 +194,8 @@ class DataHandler:
             borrow=True)
 
         """ Preprocess test data """
+        self.test_data = self.filter_data(self.test_data.transpose())
+
         self.test_data = \
             (self.test_data - self.training_data_mean)\
             / self.training_data_std
@@ -214,3 +226,6 @@ class DataHandler:
 
         if self.verbose:
             print("Data preprocessed.")
+
+    def filter_data(self, data):
+        return sgn.filtfilt(self.high_pass_filter, 1, data).transpose()

@@ -9,8 +9,8 @@ class DataHandler:
     MAX_POSITIVE_TRAINING_SETS = 50
     MAX_NEGATIVE_TRAINING_SETS = 50
     MAX_TEST_SETS = 50
-    TRAINING_DATA_DIR = "training-data/"
-    TEST_DATA_DIR = "test-data/"
+    TRAINING_DATA_DIR = "../training-data/"
+    TEST_DATA_DIR = "../test-data/"
     DATA_TYPE = np.int16
 
     def __init__(self,

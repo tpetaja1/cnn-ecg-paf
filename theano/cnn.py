@@ -111,9 +111,9 @@ class CNN:
 
         """ Cost functions """
         self.regularizer = \
-            T.sum(self.parameters[0] ** 2) +\
-            T.sum(self.parameters[2] ** 2) +\
-            T.sum(self.parameters[4] ** 2)
+            self.parameters[0].norm(L=2) +\
+            self.parameters[2].norm(L=2) +\
+            self.parameters[4].norm(L=2)
 
         self.negative_log_likelihood = \
             -T.mean(T.log(self.probabilities)[T.arange(y.shape[0]), y])

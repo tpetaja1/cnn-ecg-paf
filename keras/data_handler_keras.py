@@ -247,5 +247,6 @@ class DataHandler:
             f.write("# Optimizer,{}\n".format(paf.optimizer))
             f.write("# Conv activation,{}\n".format(paf.convolution_activation))
             f.write("# FC activation,{}\n".format(paf.fully_connected_activation))
-            f.write("# Output activation,{}\n\n".format(paf.output_activation))
+            f.write("# Output activation,{}\n".format(paf.output_activation))
+            f.write("# Classifier,{}\n\n".format(paf.classifier))
             f.write("epoch,acc,loss,val_acc,val_loss\n")

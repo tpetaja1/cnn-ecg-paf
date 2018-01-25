@@ -7,13 +7,14 @@ from keras.layers import MaxPooling1D, AveragePooling1D
 from keras.layers import Dense
 from keras.layers import Flatten
 from keras.layers import Dropout
-
 from keras.regularizers import l2
 from keras.optimizers import Adagrad, Adam, SGD
-
 from keras.callbacks import CSVLogger
 
 from data_handler_keras import DataHandler
+from callbacks import EmptyCallback, SVMCallBack
+
+from sklearn.svm import SVC
 
 
 class KerasPAFClassifier:
@@ -35,7 +36,7 @@ class KerasPAFClassifier:
                  convolution_activation="relu",
                  fully_connected_activation="relu",
                  output_activation="softmax",
-                 classifier=None,
+                 classifier="mlp",
                  low_cutoff=1,
                  high_cutoff=40):
 
@@ -77,15 +78,34 @@ class KerasPAFClassifier:
         self.fully_connected_activation = fully_connected_activation
         self.output_activation = output_activation
         self.history = None
-        
+
+        self.csv_logger = EmptyCallback()
+        self.svm_classifier = EmptyCallback()
+
         self.classifier = classifier
-        self.mlp_neurons = 32
+        self.define_classifier()
+        self.define_callbacks()
 
         if self.log:
             self.data_handler.write_information(self)
-            self.csv_logger = CSVLogger(self.filename, append=True)
 
         self.model = Sequential()
+
+    def define_classifier(self):
+        if self.classifier == "mlp":
+            self.mlp_neurons = 32
+        elif self.classifier == "gaussian_svm":
+            self.svm = SVC(C=11., kernel="rbf", gamma=1./(2*2.85))
+
+    def define_callbacks(self):
+        if self.log:
+            self.csv_logger = CSVLogger(self.filename, append=True)
+        if self.classifier == "gaussian_svm":
+            self.svm_classifier = SVMCallBack(self.data_handler.training_data,
+                                              self.data_handler.training_labels,
+                                              self.data_handler.test_data,
+                                              self.data_handler.test_labels,
+                                              self.svm)
 
     def create_model(self):
 
@@ -118,11 +138,12 @@ class KerasPAFClassifier:
                              use_bias=True,
                              kernel_initializer="glorot_normal",
                              bias_initializer="zeros",
-                             kernel_regularizer=l2(self.regularization_coefficient)
+                             kernel_regularizer=l2(self.regularization_coefficient),
+                             name="features"
                              ))
 
         self.model.add(Dropout(rate=self.dropout_rate))
-        
+
         if self.classifier == "mlp":
             self.model.add(Dense(units=self.mlp_neurons,
                                  activation=self.fully_connected_activation,
@@ -144,7 +165,7 @@ class KerasPAFClassifier:
         print(self.model.summary())
 
     def run(self):
-        
+
         if self.optimizer == "adam":
             optimizer = Adam(lr=self.learning_rate,
                              beta_1=0.9,
@@ -163,25 +184,15 @@ class KerasPAFClassifier:
                            optimizer=optimizer,
                            metrics=["accuracy"])
 
-        if self.log:
-            self.history = \
-                self.model.fit(self.data_handler.training_data,
-                               self.data_handler.training_labels,
-                               epochs=self.number_of_epochs,
-                               batch_size=self.mini_batch_size,
-                               verbose=1,
-                               validation_data=(self.data_handler.test_data,
-                                                self.data_handler.test_labels),
-                               callbacks=[self.csv_logger])
-        else:
-            self.history = \
-                self.model.fit(self.data_handler.training_data,
-                               self.data_handler.training_labels,
-                               epochs=self.number_of_epochs,
-                               batch_size=self.mini_batch_size,
-                               verbose=1,
-                               validation_data=(self.data_handler.test_data,
-                                                self.data_handler.test_labels))
+        self.history = \
+            self.model.fit(self.data_handler.training_data,
+                           self.data_handler.training_labels,
+                           epochs=self.number_of_epochs,
+                           batch_size=self.mini_batch_size,
+                           verbose=1,
+                           validation_data=(self.data_handler.test_data,
+                                            self.data_handler.test_labels),
+                           callbacks=[self.csv_logger, self.svm_classifier])
 
 
 if __name__ == "__main__":

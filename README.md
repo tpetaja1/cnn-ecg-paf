@@ -1,6 +1,6 @@
 # Convolutional Neural Network to Learn ECG Features for Screening PAF #
 
-Implemented with Python-3.5, Theano-1.0.1, SciPy-1.0.0, sklearn-0.19.1
+Contains two implementations: Theano and Keras
 
 Data available from: https://physionet.org/physiobank/database/afpdb/
 
